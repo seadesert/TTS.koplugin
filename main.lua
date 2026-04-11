@@ -90,7 +90,7 @@ end
 
 function TTS:addToMainMenu(menu_items)
 	menu_items.tts_plugin = {
-		sorting_hint = "typeset",
+		-- sorting_hint = "typeset",
 		-- text = _("TTS stuff"),
 		-- sub_item_table = {
 		-- 	{
