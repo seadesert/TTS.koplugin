@@ -89,11 +89,11 @@ function TTS:onCloseWidget()
 end
 
 function TTS:addToMainMenu(menu_items)
+	if not self.ui.document then -- only add in reader view
+		return
+	end
 	menu_items.tts_plugin = {
-		-- sorting_hint = "typeset",
-		-- text = _("TTS stuff"),
-		-- sub_item_table = {
-		-- 	{
+		sorting_hint = "typeset",
 		text = _("Start TTS Mode"),
 		callback = function()
 			self:start_tts_mode()
