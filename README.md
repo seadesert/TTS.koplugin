@@ -1,6 +1,13 @@
 # TTS plugin for koreader
 
 Adds text to speech capabilities using [piper](https://github.com/OHF-Voice/piper1-gpl/) as a backend
+This fork focuses support for Kindle devices (play audio on headphones connected to Kindle via Bluetooth)
+
+# Issues on Bluetooth on Koreader
+Unfortunately currently there is no bluetooth control from Koreader (as the com.lab126.btfd service is disabled) - so probably the headphone will disconnect after 20 minutes.
+
+Workaround: Running [KinAMP](https://github.com/kbarni/KinAMP) in background mode (run KinAMP from Kindle Homepage and Start background playback) seems to keeps the headphones from getting disconnected. (Need more analysis to confirm workaround and arive at fix)
+
 
 ## Installation
 

@@ -2,3 +2,4 @@ one.wav
 two.wav
 three.wav
 fallback.wav
+*.onnx
