@@ -2,9 +2,6 @@
 file=$1
 volume=$2
 
-# /mnt/us/extensions/sox/volume.sh "$(awk "BEGIN {print (exp($volume/100)-1)/(exp(1)-1)}")" >/dev/null 2>/dev/null
-# /mnt/us/extensions/sox/play_single_file.sh "$file" >/dev/null 2>/dev/null
-
-nohup /mnt/us/KinAMP/startkinamp_koreader.sh --radio "$file" > /dev/null 2>&1 &
+echo "$file" > "/mnt/us/KinAMP/tts_plugin.m3u" && nohup /mnt/us/KinAMP/startkinamp_koreader.sh --music "/mnt/us/KinAMP/tts_plugin.m3u" > /dev/null 2>&1 
 
 echo "done"

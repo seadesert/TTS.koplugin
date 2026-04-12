@@ -3,3 +3,4 @@ two.wav
 three.wav
 fallback.wav
 *.onnx
+*.json
