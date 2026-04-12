@@ -655,9 +655,9 @@ end
 function TTS:start_playing()
 	local choose_name = function()
 		local candidates = {
-			"plugins/TTS.koplugin/one.wav",
-			"plugins/TTS.koplugin/two.wav",
-			"plugins/TTS.koplugin/three.wav",
+			"/mnt/us/koreader/plugins/TTS.koplugin/one.wav",
+			"/mnt/us/koreader/plugins/TTS.koplugin/two.wav",
+			"/mnt/us/koreader/plugins/TTS.koplugin/three.wav",
 		}
 		for _, candidate in ipairs(candidates) do
 			if
@@ -689,7 +689,7 @@ function TTS:start_playing()
 			self.prev_item = self.current_item
 			self:change_highlight(self.next_item)
 			self.next_item = self:item_next(self.next_item)
-			wav_for_the_next:add_callback(loop_once)
+			wav_for_the_next:add_callback(loop_once) 
 		end)
 	end
 	self.playing_promise = self:ensure_wav_on_item(self.current_item, choose_name())

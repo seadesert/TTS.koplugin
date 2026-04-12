@@ -3,4 +3,7 @@
 killall play
 killall play_single_file.sh
 pkill -9 gst-launch
-pkill -9 sox
+# pkill -9 sox
+KINAMPMIN=$([ -f /lib/ld-linux-armhf.so.3 ] && echo "KinAMP-minimal" || echo "KinAMP-minimal-armel") 
+pkill -9 $KINAMPMIN
+
