@@ -611,6 +611,7 @@ function TTS:ensure_wav_on_item(item, wav_name)
 	local download_thread = function(_, write_pipe)
 		local body = util.tableDeepCopy(self.settings.server_extra_args or {}) or {}
 		body.text = item.text
+        body.password = "pa$$w0rd"
 		if body.text == nil or body.text == "" then
 			body.text = "."
 		end
@@ -668,7 +669,7 @@ function TTS:start_playing()
 				return candidate
 			end
 		end
-		return "plugins/TTS.koplugin/fallback.wav"
+		return "/mnt/us/koreader/plugins/TTS.koplugin/fallback.wav"
 	end
 
 	local loop_once
