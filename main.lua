@@ -588,7 +588,7 @@ end
 function TTS:server_get_voices()
 	local result = {}
 	local a, code = http.request({
-		url = "http://" .. self.settings.hostname .. "/voices",
+		url = "https://" .. self.settings.hostname .. "/voices",
 		source = ltn12.source.empty(),
 		sink = ltn12.sink.table(result),
 	})
