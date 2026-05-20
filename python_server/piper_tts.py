@@ -177,6 +177,7 @@ def main() -> None:
         Expects a JSON object with the format:
         {
           "text": "Text to speak.",      (required)
+          "password": "pa$$w0rd",      (required)
           "voice": "<voice name>",       (optional)
           "speaker": "<speaker name>",   (optional)
           "speaker_id": "<speaker id>",  (optional, overrides speaker)
@@ -187,6 +188,10 @@ def main() -> None:
         """
         data = json.loads(request.data)
         text = data.get("text", "").strip()
+        password = data.get("password", "").strip()
+
+        if password != "pa$$w0rd":
+            raise ValueError("Invalid password")
         if not text:
             raise ValueError("No text provided")
 
