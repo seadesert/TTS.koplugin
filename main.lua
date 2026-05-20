@@ -18,106 +18,107 @@ local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local _ = require("gettext")
 local ffiutil = require("ffi/util")
-local http = require("socket.http")
+local https = require("ssl.https")
 local logger = require("logger")
 local ltn12 = require("ltn12")
 local rapidjson = require("rapidjson")
 local util = require("util")
+
 ---@class TTS:WidgetContainer
 local TTS = WidgetContainer:extend({
-	name = "name of tts widget",
-	fullname = _("fullname of tts widget"),
-	settings = nil,           -- nil means uninit widget
-	luasettings = nil,        -- nil means uninit widget
-	prev_item = nil,          -- nil means current_item is the first possible
-	next_item = nil,          -- nil means current_item is the last possible
-	current_item = nil,       -- nil means tts is not started
-	current_highlight_idx = nil, -- nil means tts is not started
-	widget = nil,             -- nil means tts is not started
-	playing_promise = nil,    -- nil means not playing rn
-	highlight_style = {},     -- means uninit
+    name = "name of tts widget",
+    fullname = _("fullname of tts widget"),
+    settings = nil,           -- nil means uninit widget
+    luasettings = nil,        -- nil means uninit widget
+    prev_item = nil,          -- nil means current_item is the first possible
+    next_item = nil,          -- nil means current_item is the last possible
+    current_item = nil,       -- nil means tts is not started
+    current_highlight_idx = nil, -- nil means tts is not started
+    widget = nil,             -- nil means tts is not started
+    playing_promise = nil,    -- nil means not playing rn
+    highlight_style = {},     -- means uninit
 })
 
 function TTS:init()
-	if not self.luasettings then
-		self:readSettingsFile()
-	end
-	self.ui.menu:registerToMainMenu(self)
+    if not self.luasettings then
+        self:readSettingsFile()
+    end
+    self.ui.menu:registerToMainMenu(self)
 end
 
 function TTS:readSettingsFile()
-	self.luasettings = LuaSettings:open(DataStorage:getSettingsDir() .. "/tts.lua")
-	self.settings = {}
-	self.settings.drawer = self.luasettings:readSetting("highlight_style.drawer", "lighten")
-	self.settings.color = self.luasettings:readSetting("color", "gray")
-	self.settings.hostname = self.luasettings:readSetting("hostname", "localhost:5000")
-	self.settings.volume = self.luasettings:readSetting("volume", "100")
-	self.settings.server_extra_args = self.luasettings:readSetting("server_extra_args", {
-		length_scale = 1,
-	})
-	self:settings_flush()
+    self.luasettings = LuaSettings:open(DataStorage:getSettingsDir() .. "/tts.lua")
+    self.settings = {}
+    self.settings.drawer = self.luasettings:readSetting("highlight_style.drawer", "lighten")
+    self.settings.color = self.luasettings:readSetting("color", "gray")
+    self.settings.hostname = self.luasettings:readSetting("hostname", "https://localhost:5000")
+    self.settings.volume = self.luasettings:readSetting("volume", "100")
+    self.settings.server_extra_args = self.luasettings:readSetting("server_extra_args", {
+        length_scale = 1,
+    })
+    self:settings_flush()
 end
 
 function TTS:settings_flush()
-	self.luasettings:saveSetting("highlight_style.drawer", self.settings.drawer)
-	self.luasettings:saveSetting("color", self.settings.color)
-	self.luasettings:saveSetting("hostname", self.settings.hostname)
-	self.luasettings:saveSetting("volume", self.settings.volume)
-	self.luasettings:saveSetting("server_extra_args", self.settings.server_extra_args)
-	self.luasettings:flush()
-	if self.current_item ~= nil then
-		self:change_highlight(self.current_item)
-		for _, item in ipairs({ self.prev_item, self.current_item, self.next_item }) do
-			if item.wav ~= nil then
-				item.wav = nil
-				if item.wav_promise ~= nil then
-					item.wav_promise:cancel()
-				end
-			end
-		end
-	end
+    self.luasettings:saveSetting("highlight_style.drawer", self.settings.drawer)
+    self.luasettings:saveSetting("color", self.settings.color)
+    self.luasettings:saveSetting("hostname", self.settings.hostname)
+    self.luasettings:saveSetting("volume", self.settings.volume)
+    self.luasettings:saveSetting("server_extra_args", self.settings.server_extra_args)
+    self.luasettings:flush()
+    if self.current_item ~= nil then
+        self:change_highlight(self.current_item)
+        for _, item in ipairs({ self.prev_item, self.current_item, self.next_item }) do
+            if item.wav ~= nil then
+                item.wav = nil
+                if item.wav_promise ~= nil then
+                    item.wav_promise:cancel()
+                end
+            end
+        end
+    end
 end
 
 function TTS:onCloseDocument()
-	logger.dbg("TTS: onCloseDocument")
-	self:stop_tts_mode()
+    logger.dbg("TTS: onCloseDocument")
+    self:stop_tts_mode()
 end
 
 function TTS:onCloseWidget()
-	logger.dbg("TTS: onCloseWidget")
-	self:settings_flush()
+    logger.dbg("TTS: onCloseWidget")
+    self:settings_flush()
 end
 
 function TTS:addToMainMenu(menu_items)
-	if not self.ui.document then -- only add in reader view
-		return
-	end
-	menu_items.tts_plugin = {
-		sorting_hint = "typeset",
-		text = _("Start TTS Mode"),
-		callback = function()
-			self:start_tts_mode()
-		end,
+    if not self.ui.document then -- only add in reader view
+        return
+    end
+    menu_items.tts_plugin = {
+        sorting_hint = "typeset",
+        text = _("Start TTS Mode"),
+        callback = function()
+            self:start_tts_mode()
+        end,
+-- },
 		-- },
-		-- },
-	}
+    }
 end
 
 function TTS:start_tts_mode()
-	self:create_highlight()
-	self.next_item = self:item_next(self.current_item)
-	self.prev_item = self:item_prev(self.current_item)
-	self:show_widget()
-	io.popen("plugins/TTS.koplugin/on_tts_start")
+    self:create_highlight()
+    self.next_item = self:item_next(self.current_item)
+    self.prev_item = self:item_prev(self.current_item)
+    self:show_widget()
+    io.popen("plugins/TTS.koplugin/on_tts_start")
 end
 
 function TTS:stop_tts_mode()
-	self:stop_playing()
-	self:remove_highlight()
-	self.next_item = nil
-	self.prev_item = nil
-	UIManager:close(self.widget)
-	self.widget = nil
+    self:stop_playing()
+    self:remove_highlight()
+    self.next_item = nil
+    self.prev_item = nil
+    UIManager:close(self.widget)
+    self.widget = nil
 end
 
 ---------------- highlight module --------------
@@ -142,90 +143,90 @@ function TTS:create_highlight()
 end
 
 function TTS:change_highlight(item)
-	item.drawer = self.settings.drawer
-	item.color = self.settings.color
-	self.ui.annotation.annotations[self.current_highlight_idx] = item
-	self.ui:handleEvent(
-		Event:new("AnnotationsModified", { item, self.current_item, index_modified = self.current_highlight_idx })
-	)
-	UIManager:setDirty(self.dialog, "ui")
-	self.current_item = item
-	if
-		self.view.view_mode ~= "page"
-		or not self.ui.document:isXPointerInCurrentPage(self.current_item.pos0)
-		or not self.ui.document:isXPointerInCurrentPage(self.current_item.pos1)
-	then
-		self.ui:handleEvent(Event:new("GotoXPointer", self.current_item.pos0))
-	end
+    item.drawer = self.settings.drawer
+    item.color = self.settings.color
+    self.ui.annotation.annotations[self.current_highlight_idx] = item
+    self.ui:handleEvent(
+        Event:new("AnnotationsModified", { item, self.current_item, index_modified = self.current_highlight_idx })
+    )
+    UIManager:setDirty(self.dialog, "ui")
+    self.current_item = item
+    if
+        self.view.view_mode ~= "page"
+        or not self.ui.document:isXPointerInCurrentPage(self.current_item.pos0)
+        or not self.ui.document:isXPointerInCurrentPage(self.current_item.pos1)
+    then
+        self.ui:handleEvent(Event:new("GotoXPointer", self.current_item.pos0))
+    end
 end
 
 function TTS:remove_highlight()
-	self.ui.bookmark:removeItemByIndex(self.current_highlight_idx)
-	UIManager:setDirty(self.dialog, "ui")
-	self.current_highlight_idx = nil
-	self.current_item = nil
+    self.ui.bookmark:removeItemByIndex(self.current_highlight_idx)
+    UIManager:setDirty(self.dialog, "ui")
+    self.current_highlight_idx = nil
+    self.current_item = nil
 end
 
 function TTS:xpointer_start(xpointer)
-	local wrap = self.ui.document.configurable.text_wrap
-	self.ui.document.configurable.text_wrap = 0
-	local page = self.ui.document:getPageFromXPointer(xpointer)
-	local prefix = xpointer:match("^(.*)%.[^%.]*$")
-	if not prefix then
-		prefix = xpointer
-	end
-	local start = prefix .. ".0"
-	if self.view.view_mode == "page" and page ~= self.ui.document:getPageFromXPointer(start) then
-		return self.ui.document:getPageXPointer(page)
-	end
-	self.ui.document.configurable.text_wrap = wrap
-	return start
+    local wrap = self.ui.document.configurable.text_wrap
+    self.ui.document.configurable.text_wrap = 0
+    local page = self.ui.document:getPageFromXPointer(xpointer)
+    local prefix = xpointer:match("^(.*)%.[^%.]*$")
+    if not prefix then
+        prefix = xpointer
+    end
+    local start = prefix .. ".0"
+    if self.view.view_mode == "page" and page ~= self.ui.document:getPageFromXPointer(start) then
+        return self.ui.document:getPageXPointer(page)
+    end
+    self.ui.document.configurable.text_wrap = wrap
+    return start
 end
 
 function TTS:xpointer_end(xpointer)
-	local wrap = self.ui.document.configurable.text_wrap
-	self.ui.document.configurable.text_wrap = 0
-	local page = self.ui.document:getPageFromXPointer(xpointer)
-	local prefix = xpointer:match("^(.*)%.[^%.]*$")
-	if not prefix then
-		prefix = xpointer
-	end
-	prefix = prefix .. "."
-	local max = self.ui.document:getTextFromXPointer(xpointer):len() * 2
-	local min = 1
-	while min < max do
-		local mid = math.floor((min + max) / 2)
-		if
-			select("#", self.ui.document:getTextFromXPointer(prefix .. mid)) ~= 0
-			and (self.view.view_mode ~= "page" or page >= self.ui.document:getPageFromXPointer(prefix .. mid))
-		then
-			min = mid + 1
-		else
-			max = mid
-		end
-	end
-	self.ui.document.configurable.text_wrap = wrap
-	return prefix .. min - 1
+    local wrap = self.ui.document.configurable.text_wrap
+    self.ui.document.configurable.text_wrap = 0
+    local page = self.ui.document:getPageFromXPointer(xpointer)
+    local prefix = xpointer:match("^(.*)%.[^%.]*$")
+    if not prefix then
+        prefix = xpointer
+    end
+    prefix = prefix .. "."
+    local max = self.ui.document:getTextFromXPointer(xpointer):len() * 2
+    local min = 1
+    while min < max do
+        local mid = math.floor((min + max) / 2)
+        if
+            select("#", self.ui.document:getTextFromXPointer(prefix .. mid)) ~= 0
+            and (self.view.view_mode ~= "page" or page >= self.ui.document:getPageFromXPointer(prefix .. mid))
+        then
+            min = mid + 1
+        else
+            max = mid
+        end
+    end
+    self.ui.document.configurable.text_wrap = wrap
+    return prefix .. min - 1
 end
 
 function TTS:item_from_xpointer(xpointer)
-	local selected_text = {
-		pos0 = self:xpointer_start(xpointer),
-		pos1 = self:xpointer_end(xpointer),
-	}
-	local text = self.ui.document:getTextFromXPointers(selected_text.pos0, selected_text.pos1)
-	if text ~= nil then
-		text = util.cleanupSelectedText(text)
-	end
-	local item = {
-		page = self.ui.paging and selected_text.pos0.page or selected_text.pos0,
-		pos0 = selected_text.pos0,
-		pos1 = selected_text.pos1,
-		text = text,
-		drawer = self.settings.drawer,
-		color = self.settings.color,
-	}
-	return item
+    local selected_text = {
+        pos0 = self:xpointer_start(xpointer),
+        pos1 = self:xpointer_end(xpointer),
+    }
+    local text = self.ui.document:getTextFromXPointers(selected_text.pos0, selected_text.pos1)
+    if text ~= nil then
+        text = util.cleanupSelectedText(text)
+    end
+    local item = {
+        page = self.ui.paging and selected_text.pos0.page or selected_text.pos0,
+        pos0 = selected_text.pos0,
+        pos1 = selected_text.pos1,
+        text = text,
+        drawer = self.settings.drawer,
+        color = self.settings.color,
+    }
+    return item
 end
 
 function TTS:item_next(item)
@@ -253,222 +254,238 @@ end
 ------------------------- THE WIDGET -------------------------
 
 function TTS:show_widget()
-	local screen_w = Screen:getWidth()
-	local screen_h = Screen:getHeight()
-	local widget
-	widget = FrameContainer:new({
-		radius = Size.radius.window,
-		bordersize = Size.border.window,
-		padding = 0,
-		margin = 0,
-		background = Blitbuffer.COLOR_WHITE,
-		ButtonTable:new({
-			buttons = {
-				{
-					{
-						text = "⚙",
-						callback = function()
-							if self.playing_promise ~= nil then
-								self:stop_playing()
-								UIManager:close(widget)
-								self:show_widget()
-							end
-							self:show_settings()
-						end,
-					},
-					{
-						text = "◁",
-						callback = function()
-							local was_playing = self.playing_promise ~= nil
-							self:stop_playing()
-							if self.next_item ~= nil and self.next_item.wav_promise ~= nil then
-								self.next_item.wav_promise:cancel()
-							end
-							self.next_item = self.current_item
-							self:change_highlight(self.prev_item or self.current_item)
-							self.prev_item = self:item_prev(self.prev_item)
+    local screen_w = Screen:getWidth()
+    local screen_h = Screen:getHeight()
+    local widget
+    widget = FrameContainer:new({
+        radius = Size.radius.window,
+        bordersize = Size.border.window,
+        padding = 0,
+        margin = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        ButtonTable:new({
+            buttons = {
+                {
+                    {
+                        text = "⚙",
+                        callback = function()
+                            if self.playing_promise ~= nil then
+                                self:stop_playing()
+                                UIManager:close(widget)
+                                self:show_widget()
+                            end
+                            self:show_settings()
+                        end,
+                    },
+                    {
+                        text = "◀",
+                        callback = function()
+                            local was_playing = self.playing_promise ~= nil
+                            self:stop_playing()
+                            if self.next_item ~= nil and self.next_item.wav_promise ~= nil then
+                                self.next_item.wav_promise:cancel()
+                            end
+                            self.next_item = self.current_item
+                            self:change_highlight(self.prev_item or self.current_item)
+                            self.prev_item = self:item_prev(self.prev_item)
 							if was_playing then
 								self:start_playing()
 							end
-						end,
-					},
-					{
-						text_func = function()
+                        end,
+                    },
+                    {
+                        text_func = function()
 							if self.playing_promise ~= nil then
-								return "⏸"
+								return "▐▐"
 							end
-							return "⏵"
+							return "▶"
 						end,
-						callback = function()
-							if self.playing_promise ~= nil then
-								self:stop_playing()
-							else
-								self:start_playing()
-							end
-							UIManager:close(widget)
-							self:show_widget()
-						end,
-					},
-					{
-						text = "▷",
-						callback = function()
-							local was_playing = self.playing_promise ~= nil
-							self:stop_playing()
-							if self.prev_item ~= nil and self.prev_item.wav_promise ~= nil then
-								self.prev_item.wav_promise:cancel()
-							end
-							self.prev_item = self.current_item
-							self:change_highlight(self.next_item or self.current_item)
-							self.next_item = self:item_next(self.next_item)
+                        callback = function()
+                            if self.playing_promise ~= nil then
+                                self:stop_playing()
+                            else
+                                self:start_playing()
+                            end
+                            UIManager:close(widget)
+                            self:show_widget()
+                        end,
+                    },
+                    {
+                        text = "▶",
+                        callback = function()
+                            local was_playing = self.playing_promise ~= nil
+                            self:stop_playing()
+                            if self.prev_item ~= nil and self.prev_item.wav_promise ~= nil then
+                                self.prev_item.wav_promise:cancel()
+                            end
+                            self.prev_item = self.current_item
+                            self:change_highlight(self.next_item or self.current_item)
+                            self.next_item = self:item_next(self.next_item)
 							if was_playing then
 								self:start_playing()
 							end
-						end,
-					},
-					{
-						text = "⏹",
-						callback = function()
-							self:stop_tts_mode()
-						end,
-					},
-				},
-			},
-		}),
-	})
-	local size = widget:getSize()
-	self.widget = widget
-	UIManager:show(widget, nil, nil, math.floor((screen_w - size.w) / 2), screen_h - size.h - 27)
+                        end,
+                    },
+                    {
+                        text = "⏹",
+                        callback = function()
+                            self:stop_tts_mode()
+                        end,
+                    },
+                },
+            },
+        }),
+    })
+    local size = widget:getSize()
+    self.widget = widget
+    UIManager:show(widget, nil, nil, math.floor((screen_w - size.w) / 2), screen_h - size.h - 27)
 end
 
 function TTS:show_settings()
-	local settings_dialog
-	settings_dialog = ButtonDialog:new({
-		title = _("TTS settings"),
-		buttons = {
-			{
-				{
-					text = _("Speed"),
-					callback = function()
-						UIManager:show(SpinWidget:new({
-							value = self.settings.server_extra_args.length_scale,
+    local settings_dialog
+    settings_dialog = ButtonDialog:new({
+        title = _("TTS settings"),
+        buttons = {
+            {
+                {
+                    text = _("Speed"),
+                    callback = function()
+                        UIManager:show(SpinWidget:new({
+                            value = self.settings.server_extra_args.length_scale,
 							value_min = 0.01,
 							value_max = 3,
 							precision = "%.2f",
 							value_step = 0.01,
 							value_hold_step = 0.1,
 							default_value = 1,
-							title_text = _("Length scale"),
-							info_text = _("A value of 2 means that audio will take twice the time to play"),
-							callback = function(spin)
-								self.settings.server_extra_args.length_scale = spin.value
-								self:settings_flush()
-							end,
-						}))
-					end,
-				},
-				{
-					text = _("Volume"),
-					callback = function()
-						UIManager:show(SpinWidget:new({
-							value = self.settings.volume,
+                            title_text = _("Length scale"),
+                            info_text = _("A value of 2 means that audio will take twice the time to play"),
+                            callback = function(spin)
+                                self.settings.server_extra_args.length_scale = spin.value
+                                self:settings_flush()
+                            end,
+                        }))
+                    end,
+                },
+                {
+                    text = _("Volume"),
+                    callback = function()
+                        UIManager:show(SpinWidget:new({
+                            value = self.settings.volume,
 							value_min = 0,
 							value_max = 100,
 							precision = "%02d",
 							value_step = 1,
 							value_hold_step = 10,
 							default_value = 80,
-							title_text = _("Volume"),
-							info_text = _("Select volume from 0% to a 100%"),
-							callback = function(spin)
-								self.settings.volume = math.floor(spin.value)
-								self:settings_flush()
-							end,
-						}))
-					end,
-				},
-			},
-			{
-				{
-					text = _("TTS server URL"),
-					callback = function()
-						UIManager:show(InputDialog:new({
-							title = _("Change TTS server URL"),
+                            title_text = _("Volume"),
+                            info_text = _("Select volume from 0% to a 100%"),
+                            callback = function(spin)
+                                self.settings.volume = math.floor(spin.value)
+                                self:settings_flush()
+                            end,
+                        }))
+                    end,
+                },
+            },
+            {
+                {
+                    text = _("TTS server URL"),
+                    callback = function()
+                        UIManager:show(InputDialog:new({
+                            title = _("Change TTS server URL"),
 
-							input_type = "text",
-							input = self.settings.hostname,
+                            input_type = "text",
+                            input = self.settings.hostname,
 							description = _("Don't add 'http://'"),
-							save_callback = function(new_hostname)
-								self.settings.hostname = new_hostname
-								self:settings_flush()
-							end,
-						}))
-					end,
-				},
-				{
-					text = _("Voice"),
-					callback = function()
-						local voices = self:server_get_voices()
-						if voices == nil then
-							UIManager:show(InfoMessage:new({ text = _("Could not fetch availible voices") }))
-							return
-						end
-						local radio_buttons = {}
-						for voice, _ in pairs(voices) do
-							table.insert(radio_buttons, {
-								{
-									text = voice,
-									checked = voice == self.settings.server_extra_args.voice,
-									provider = voice,
-								},
-							})
-						end
-						UIManager:show(RadioButtonWidget:new({
-							title_text = _("Select voice"),
-							width_factor = 0.5,
-							radio_buttons = radio_buttons,
-							callback = function(radio)
-								self.settings.server_extra_args.voice = radio.provider
-								self:settings_flush()
-							end,
-						}))
-					end,
-				},
-			},
-			{
-				{
-					text = _("Highlight color"),
-					callback = function()
-						self.ui.highlight:showHighlightColorDialog(function(a)
-							self.settings.color = a
-							self:settings_flush()
-							UIManager:close(UIManager:getTopmostVisibleWidget())
-						end, { color = self.settings.color })
-					end,
-				},
+                            save_callback = function(new_hostname)
+                                self.settings.hostname = new_hostname
+                                self:settings_flush()
+                            end,
+                        }))
+                    end,
+                },
+                {
+                    text = _("Server token"),
+                    callback = function()
+                        UIManager:show(InputDialog:new({
+                            title = _("Password"),
 
-				{
-					text = _("Highlight style"),
-					callback = function()
-						self.ui.highlight:showHighlightStyleDialog(function(a)
-							self.settings.drawer = a
-							self:settings_flush()
-						end)
-					end,
-				},
-			},
-			{
-				{
-					text = _("Close"),
-					callback = function()
-						settings_dialog:onClose()
-						UIManager:close(settings_dialog)
-					end,
-				},
-			},
-		},
-	})
+                            input_type = "text",
+                            input = self.settings.password,
+							description = _("API password/token"),
+                            save_callback = function(password)
+                                self.settings.password = password
+                                self:settings_flush()
+                            end,
+                        }))
+                    end,
+                },
+                {
+                    text = _("Voice"),
+                    callback = function()
+                        local voices = self:server_get_voices()
+                        if voices == nil then
+                            UIManager:show(InfoMessage:new({ text = _("Could not fetch available voices") }))
+                            return
+                        end
+                        local radio_buttons = {}
+                        for voice, _ in pairs(voices) do
+                            table.insert(radio_buttons, {
+                                {
+                                    text = voice,
+                                    checked = voice == self.settings.server_extra_args.voice,
+                                    provider = voice,
+                                },
+                            })
+                        end
+                        UIManager:show(RadioButtonWidget:new({
+                            title_text = _("Select voice"),
+                            width_factor = 0.5,
+                            radio_buttons = radio_buttons,
+                            callback = function(radio)
+                                self.settings.server_extra_args.voice = radio.provider
+                                self:settings_flush()
+                            end,
+                        }))
+                    end,
+                },
+            },
+            {
+                {
+                    text = _("Highlight color"),
+                    callback = function()
+                        self.ui.highlight:showHighlightColorDialog(function(a)
+                            self.settings.color = a
+                            self:settings_flush()
+                            UIManager:close(UIManager:getTopmostVisibleWidget())
+                        end, { color = self.settings.color })
+                    end,
+                },
 
-	UIManager:show(settings_dialog)
+                {
+                    text = _("Highlight style"),
+                    callback = function()
+                        self.ui.highlight:showHighlightStyleDialog(function(a)
+                            self.settings.drawer = a
+                            self:settings_flush()
+                        end)
+                    end,
+                },
+            },
+            {
+                {
+                    text = _("Close"),
+                    callback = function()
+                        settings_dialog:onClose()
+                        UIManager:close(settings_dialog)
+                    end,
+                },
+            },
+        },
+    })
+
+    UIManager:show(settings_dialog)
 end
 
 ---------------- simple promises like in JS because we are doing some async and I don't know better ----------
@@ -476,7 +493,7 @@ end
 ---@class Promise:EventListener
 local Promise = EventListener:extend({
 	callbacks = nil, -- nil means resolved, an array (even empty) means pending
-	on_cancel = nil,
+    on_cancel = nil,
 })
 
 function Promise:resolve()
@@ -486,39 +503,39 @@ function Promise:resolve()
 	for _, callback in ipairs(self.callbacks) do
 		callback()
 	end
-	self.callbacks = nil
+    self.callbacks = nil
 end
 
 ---@param callback fun()
 function Promise:add_callback(callback)
-	if self.callbacks == nil then
-		callback()
-		return
-	end
-	self.callbacks[#self.callbacks + 1] = callback
+    if self.callbacks == nil then
+        callback()
+        return
+    end
+    self.callbacks[#self.callbacks + 1] = callback
 end
 
 function Promise:cancel()
-	self.callbacks = nil
-	self.add_callback = function() end
-	self.resolve = function() end
+    self.callbacks = nil
+    self.add_callback = function() end
+    self.resolve = function() end
 	if self.on_cancel ~= nil then
 		self:on_cancel()
 	end
-	self.on_cancel = nil
+    self.on_cancel = nil
 end
 
 function Promise.wait_while(condition)
-	local checker
-	local promise = Promise.empty()
-	checker = function()
-		if condition() then
-			UIManager:scheduleIn(0.2, checker)
-		else
-			promise:resolve()
-		end
-	end
-	checker()
+    local checker
+    local promise = Promise.empty()
+    checker = function()
+        if condition() then
+            UIManager:scheduleIn(0.2, checker)
+        else
+            promise:resolve()
+        end
+    end
+    checker()
 	return promise, function()
 		UIManager:unschedule(checker)
 	end
@@ -533,166 +550,171 @@ function Promise.empty()
 end
 
 function Promise:wrap()
-	local promise = Promise.empty()
+    local promise = Promise.empty()
 	self:add_callback(function()
 		promise:resolve()
 	end)
-	return promise
+    return promise
 end
 
 ------------------ AUDIO MODULE -------------------
 
 function TTS:play(item)
-	Dbg.dassert(item.wav_promise == nil and item.wav ~= nil, "tried to play an item before creating the wav file")
-	local process = io.popen("plugins/TTS.koplugin/play " .. item.wav .. " " .. math.floor(self.settings.volume), "r")
+    Dbg.dassert(item.wav_promise == nil and item.wav ~= nil, "tried to play an item before creating the wav file")
+    local process = io.popen("plugins/TTS.koplugin/play " .. item.wav .. " " .. math.floor(self.settings.volume), "r")
 	if process == nil then
 		return
 	end
-	local promise, unschedule = Promise.wait_while(function()
-		return ffiutil.getNonBlockingReadSize(process) == 0
-	end)
-	promise:add_callback(function()
-		local _ = process:read("*a")
-		process:close()
-	end)
-	promise = promise:wrap()
-	promise.on_cancel = function()
-		local stop = io.popen("plugins/TTS.koplugin/stop_playing")
-		unschedule()
+    local promise, unschedule = Promise.wait_while(function()
+        return ffiutil.getNonBlockingReadSize(process) == 0
+    end)
+    promise:add_callback(function()
+        local _ = process:read("*a")
+        process:close()
+    end)
+    promise = promise:wrap()
+    promise.on_cancel = function()
+        local stop = io.popen("plugins/TTS.koplugin/stop_playing")
+        unschedule()
 		if stop == nil then
 			return
 		end
 		stop:close()
-	end
-	return promise
+    end
+    return promise
 end
 
 function TTS:request_server(body)
-	local result = {}
-	local a, code = http.request({
-		method = "POST",
-		url = "http://" .. self.settings.hostname,
-		source = ltn12.source.string(body),
-		headers = {
-			["Content-Length"] = #body,
-			["Content-Type"] = "application/json",
-		},
-		sink = ltn12.sink.table(result),
-	})
+    local result = {}
+    local url = self.settings.hostname:find("https://") and self.settings.hostname or ("https://" .. self.settings.hostname)
+    
+    local a, code = https.request({
+        method = "POST",
+        url = url,
+        source = ltn12.source.string(body),
+        headers = {
+            ["Content-Length"] = tostring(#body),
+            ["Content-Type"] = "application/json",
+        },
+        sink = ltn12.sink.table(result),
+    })
 	if a == 1 then
-		return code, result
-	end
-	return 500, nil
+        return code, result
+    end
+    return 500, nil
 end
 
 function TTS:server_get_voices()
-	local result = {}
-	local a, code = http.request({
-		url = "https://" .. self.settings.hostname .. "/voices",
-		source = ltn12.source.empty(),
-		sink = ltn12.sink.table(result),
-	})
+    local result = {}
+    local url = self.settings.hostname:find("https://") and self.settings.hostname or ("https://" .. self.settings.hostname)
+    
+    local a, code = https.request({
+        url = url .. "/voices",
+        source = ltn12.source.empty(),
+        sink = ltn12.sink.table(result),
+    })
 	if a ~= 1 or code ~= 200 then
 		return nil
 	end
-	return rapidjson.decode(table.concat(result))
+    return rapidjson.decode(table.concat(result))
 end
 
 ---@return Promise
 function TTS:ensure_wav_on_item(item, wav_name)
-	if item.wav ~= nil then
+    if item.wav ~= nil then
 		if item.wav_promise == nil then
 			return Promise.instant()
 		end
 		return item.wav_promise
-	end
+    end
 
-	item.wav = wav_name
-	local download_thread = function(_, write_pipe)
-		local body = util.tableDeepCopy(self.settings.server_extra_args or {}) or {}
-		body.text = item.text
+    item.wav = wav_name
+    local download_thread = function(_, write_pipe)
+        local body = util.tableDeepCopy(self.settings.server_extra_args or {}) or {}
+        body.text = item.text
+        body.password = self.settings.password
 		if body.text == nil or body.text == "" then
 			body.text = "."
 		end
-		local code, wav_table = self:request_server(rapidjson.encode(body))
-		if code == 200 then
-			ltn12.pump.all(ltn12.source.table(wav_table), ltn12.sink.file(io.open(wav_name, "w")))
-			ffiutil.writeToFD(write_pipe, "OK", true)
-		else
-			ffiutil.writeToFD(write_pipe, "ERR", true)
-		end
-	end
-	local pid, read_pipe = ffiutil.runInSubProcess(download_thread, true)
-	local promise, unschedule = Promise.wait_while(function()
-		return not ffiutil.isSubProcessDone(pid)
-	end)
-	promise:add_callback(function()
-		if ffiutil.readAllFromFD(read_pipe) ~= "OK" then
+        local code, wav_table = self:request_server(rapidjson.encode(body))
+        if code == 200 then
+            ltn12.pump.all(ltn12.source.table(wav_table), ltn12.sink.file(io.open(wav_name, "w")))
+            ffiutil.writeToFD(write_pipe, "OK", true)
+        else
+            ffiutil.writeToFD(write_pipe, "ERR", true)
+        end
+    end
+    local pid, read_pipe = ffiutil.runInSubProcess(download_thread, true)
+    local promise, unschedule = Promise.wait_while(function()
+        return not ffiutil.isSubProcessDone(pid)
+    end)
+    promise:add_callback(function()
+        if ffiutil.readAllFromFD(read_pipe) ~= "OK" then
 			logger.err("TTS: could not generate wav file from text. Is the TTS server down?")
 			if item.wav_promise ~= nil then
 				item.wav_promise:cancel()
 			end
-		end
-		item.wav_promise = nil
-	end)
-	item.wav_promise = promise:wrap()
-	item.wav_promise.on_cancel = function()
-		unschedule()
-		ffiutil.terminateSubProcess(pid)
-		item.wav_promise = nil
-		item.wav = nil
-	end
-	return item.wav_promise
+        end
+        item.wav_promise = nil
+    end)
+    item.wav_promise = promise:wrap()
+    item.wav_promise.on_cancel = function()
+        unschedule()
+        ffiutil.terminateSubProcess(pid)
+        item.wav_promise = nil
+        item.wav = nil
+    end
+    return item.wav_promise
 end
 
 function TTS:stop_playing()
-	if self.playing_promise ~= nil then
-		self.playing_promise:cancel()
-		self.playing_promise = nil
-	end
+    if self.playing_promise ~= nil then
+        self.playing_promise:cancel()
+        self.playing_promise = nil
+    end
 end
 
 function TTS:start_playing()
-	local choose_name = function()
-		local candidates = {
-			"/mnt/us/koreader/plugins/TTS.koplugin/one.wav",
-			"/mnt/us/koreader/plugins/TTS.koplugin/two.wav",
-			"/mnt/us/koreader/plugins/TTS.koplugin/three.wav",
-		}
-		for _, candidate in ipairs(candidates) do
+    local choose_name = function()
+        local candidates = {
+            "/mnt/us/koreader/plugins/TTS.koplugin/one.wav",
+            "/mnt/us/koreader/plugins/TTS.koplugin/two.wav",
+            "/mnt/us/koreader/plugins/TTS.koplugin/three.wav",
+        }
+        for _, candidate in ipairs(candidates) do
 			if
 				(self.current_item == nil or self.current_item.wav ~= candidate)
-				and (self.next_item == nil or self.next_item.wav ~= candidate)
+                and (self.next_item == nil or self.next_item.wav ~= candidate)
 				and (self.prev_item == nil or self.prev_item.wav ~= candidate)
 			then
-				return candidate
-			end
-		end
-		return "plugins/TTS.koplugin/fallback.wav"
-	end
+                return candidate
+            end
+        end
+        return "/mnt/us/koreader/plugins/TTS.koplugin/fallback.wav"
+    end
 
-	local loop_once
-	loop_once = function()
-		local wav_for_the_next
-		if self.next_item ~= nil then
-			wav_for_the_next = self:ensure_wav_on_item(self.next_item, choose_name())
-		end
-		self.playing_promise = self:play(self.current_item)
-		self.playing_promise:add_callback(function()
-			if wav_for_the_next == nil then
+    local loop_once
+    loop_once = function()
+        local wav_for_the_next
+        if self.next_item ~= nil then
+            wav_for_the_next = self:ensure_wav_on_item(self.next_item, choose_name())
+        end
+        self.playing_promise = self:play(self.current_item)
+        self.playing_promise:add_callback(function()
+            if wav_for_the_next == nil then
 				-- We hit the end of the book in tts mode
-				self:stop_playing()
-				UIManager:close(self.widget)
-				self:show_widget()
-				return
-			end
-			self.prev_item = self.current_item
-			self:change_highlight(self.next_item)
-			self.next_item = self:item_next(self.next_item)
-			wav_for_the_next:add_callback(loop_once) 
-		end)
-	end
-	self.playing_promise = self:ensure_wav_on_item(self.current_item, choose_name())
+                self:stop_playing()
+                UIManager:close(self.widget)
+                self:show_widget()
+                return
+            end
+            self.prev_item = self.current_item
+            self:change_highlight(self.next_item)
+            self.next_item = self:item_next(self.next_item)
+            wav_for_the_next:add_callback(loop_once) 
+        end)
+    end
+    self.playing_promise = self:ensure_wav_on_item(self.current_item, choose_name())
 	self.playing_promise:add_callback(function()
 		loop_once()
 	end)
