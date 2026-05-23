@@ -1,6 +1,16 @@
 """
-Production-ready Flask web server for Piper.
-Save this as app.py
+Python Piper-TTS server based on Flask, based on piper script [https://github.com/OHF-Voice/piper1-gpl/blob/main/src/piper/http_server.py]
+
+Install necessary dependencies using:
+python3 -m pip install piper-tts[http] gunicorn
+
+set following environment variables:
+export PIPER_MODEL="~/model.onnx"
+export PIPER_USE_CUDA="false"
+export API_PASSWORD="p4$$w0rd"
+
+Run server using:
+gunicorn -w 1 --threads 4 -b 0.0.0.0:5000 piper_tts:app
 """
 
 import os
@@ -31,7 +41,7 @@ DOWNLOAD_DIR = Path(os.environ.get("PIPER_DOWNLOAD_DIR", DATA_DIRS[0]))
 SENTENCE_SILENCE = float(os.environ.get("PIPER_SENTENCE_SILENCE", 0.0))
 DEFAULT_SPEAKER = int(os.environ.get("PIPER_SPEAKER", 0))
 DEBUG_MODE = os.environ.get("PIPER_DEBUG", "false").lower() == "true"
-PASSWORD = os.environ.get("API_PASSWORD", "password")
+PASSWORD = os.environ.get("API_PASSWORD", "p4$$w0rd")
 
 # --- LOGGING SETUP ---
 logging.basicConfig(level=logging.DEBUG if DEBUG_MODE else logging.INFO)
@@ -85,16 +95,16 @@ def app_all_voices() -> Dict[str, Any]:
     with urlopen(VOICES_JSON) as response:
         return json.load(response)
 
-@app.route("/download", methods=["POST"])
-def app_download() -> str:
-    data = request.get_json()
-    model_id = data.get("voice")
-    if not model_id:
-        return "voice is required", 400
+# @app.route("/download", methods=["POST"])
+# def app_download() -> str:
+#     data = request.get_json()
+#     model_id = data.get("voice")
+#     if not model_id:
+#         return "voice is required", 400
 
-    force_redownload = data.get("force_redownload", False)
-    download_voice(model_id, DOWNLOAD_DIR, force_redownload=force_redownload)
-    return model_id
+#     force_redownload = data.get("force_redownload", False)
+#     download_voice(model_id, DOWNLOAD_DIR, force_redownload=force_redownload)
+#     return model_id
 
 @app.route("/", methods=["POST"])
 def app_synthesize():
@@ -142,7 +152,6 @@ def app_synthesize():
     )
 
     _LOGGER.debug("Synthesizing: '%s'", text)
-
     try:
         with io.BytesIO() as wav_io:
             wav_file: wave.Wave_write = wave.open(wav_io, "wb")

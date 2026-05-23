@@ -1,4 +1,4 @@
-# TTS plugin for koreader (Kindle)
+# TTS plugin for Koreader (Kindle version)
 
 Adds text to speech capabilities using [KinAMP](https://github.com/kbarni/KinAMP) and [piper](https://github.com/OHF-Voice/piper1-gpl/) as a backend
 This fork focuses support for Kindle devices (play audio on headphones connected to Kindle via Bluetooth)
@@ -6,7 +6,7 @@ This fork focuses support for Kindle devices (play audio on headphones connected
 
 ## Pre-requisites
 
-1. Jailbroken Kindle with KinAMP and koreader installed
+1. Kindle with KinAMP and Koreader installed
 2. A PC to host piper-tts web server
 
 

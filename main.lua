@@ -52,6 +52,7 @@ function TTS:readSettingsFile()
     self.settings.drawer = self.luasettings:readSetting("highlight_style.drawer", "lighten")
     self.settings.color = self.luasettings:readSetting("color", "gray")
     self.settings.hostname = self.luasettings:readSetting("hostname", "https://localhost:5000")
+    self.settings.password = self.luasettings:readSetting("password", "p4$$w0rd")
     self.settings.volume = self.luasettings:readSetting("volume", "100")
     self.settings.server_extra_args = self.luasettings:readSetting("server_extra_args", {
         length_scale = 1,
@@ -63,6 +64,7 @@ function TTS:settings_flush()
     self.luasettings:saveSetting("highlight_style.drawer", self.settings.drawer)
     self.luasettings:saveSetting("color", self.settings.color)
     self.luasettings:saveSetting("hostname", self.settings.hostname)
+    self.luasettings:saveSetting("password", self.settings.password)
     self.luasettings:saveSetting("volume", self.settings.volume)
     self.luasettings:saveSetting("server_extra_args", self.settings.server_extra_args)
     self.luasettings:flush()
@@ -296,7 +298,7 @@ function TTS:show_widget()
                     {
                         text_func = function()
 							if self.playing_promise ~= nil then
-								return "▐▐"
+								return "||"
 							end
 							return "▶"
 						end,
@@ -338,7 +340,7 @@ function TTS:show_widget()
     })
     local size = widget:getSize()
     self.widget = widget
-    UIManager:show(widget, nil, nil, math.floor((screen_w - size.w) / 2), screen_h - size.h - 27)
+    UIManager:show(widget, nil, nil, math.floor((screen_w - size.w) / 2), screen_h - size.h - 20)
 end
 
 function TTS:show_settings()
@@ -394,28 +396,11 @@ function TTS:show_settings()
                     callback = function()
                         UIManager:show(InputDialog:new({
                             title = _("Change TTS server URL"),
-
                             input_type = "text",
                             input = self.settings.hostname,
 							description = _("Don't add 'http://'"),
                             save_callback = function(new_hostname)
                                 self.settings.hostname = new_hostname
-                                self:settings_flush()
-                            end,
-                        }))
-                    end,
-                },
-                {
-                    text = _("Server token"),
-                    callback = function()
-                        UIManager:show(InputDialog:new({
-                            title = _("Password"),
-
-                            input_type = "text",
-                            input = self.settings.password,
-							description = _("API password/token"),
-                            save_callback = function(password)
-                                self.settings.password = password
                                 self:settings_flush()
                             end,
                         }))
@@ -479,6 +464,21 @@ function TTS:show_settings()
                     callback = function()
                         settings_dialog:onClose()
                         UIManager:close(settings_dialog)
+                    end,
+                },
+                {
+                    text = _("Server token"),
+                    callback = function()
+                        UIManager:show(InputDialog:new({
+                            title = _("Password"),
+                            input_type = "text",
+                            input = self.settings.password,
+							description = _("API password/token"),
+                            save_callback = function(password)
+                                self.settings.password = password
+                                self:settings_flush()
+                            end,
+                        }))
                     end,
                 },
             },
@@ -558,7 +558,6 @@ function Promise:wrap()
 end
 
 ------------------ AUDIO MODULE -------------------
-
 function TTS:play(item)
     Dbg.dassert(item.wav_promise == nil and item.wav ~= nil, "tried to play an item before creating the wav file")
     local process = io.popen("plugins/TTS.koplugin/play " .. item.wav .. " " .. math.floor(self.settings.volume), "r")
